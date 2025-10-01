@@ -4,10 +4,13 @@ import CollaborativeEditor from './components/CollaborativeEditor';
 import LivePreview from './components/LivePreview';
 import Chat from './components/Chat';
 import ReviewSidebar from './components/ReviewSidebar';
+import DebugPanel from './components/DebugPanel';
 import { useCollaboration } from './hooks/useCollaboration';
 import { useCodeReview } from './hooks/useCodeReview';
+import { useDebugger } from './hooks/useDebugger';
 import type { CodeIssue } from './types/codeReview';
-import { Code, Eye, MessageSquare, Sparkles } from 'lucide-react';
+import type { FixSuggestion } from './hooks/useDebugger';
+import { Code, Eye, MessageSquare, Sparkles, Bug } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -33,10 +36,20 @@ function App() {
   const [activeLanguage, setActiveLanguage] = useState<'html' | 'css' | 'javascript'>('html');
   const [showChat, setShowChat] = useState(true);
   const [showReview, setShowReview] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   
   // Code review
   const { issues, isAnalyzing, analyzeCode, dismissIssue } = useCodeReview();
+  
+  // Debugger
+  const { 
+    activeErrors, 
+    captureError, 
+    analyzeError, 
+    dismissError, 
+    clearErrors 
+  } = useDebugger();
 
   // Socket.io connection
   useEffect(() => {
@@ -139,6 +152,34 @@ function App() {
     }
   };
 
+  // Debug handlers
+  const handleRuntimeError = (error: any) => {
+    const errorId = captureError(error);
+    
+    // Only auto-open and analyze if it's a new error (not a duplicate)
+    if (errorId && errorId.includes('-')) {
+      setShowDebug(true); // Auto-open debug panel on error
+      
+      // Auto-analyze the error after a short delay
+      setTimeout(() => {
+        analyzeError(errorId, js, 'javascript');
+      }, 500);
+    }
+  };
+
+  const handleApplyFix = (errorId: string, suggestion: FixSuggestion) => {
+    if (!suggestion.code || !suggestion.line) {
+      console.log('Cannot apply fix: missing code or line number');
+      return;
+    }
+    
+    // TODO: Implement applying fix to the editor at specific line
+    console.log('Apply fix:', suggestion);
+    
+    // For now, just dismiss the error
+    dismissError(errorId);
+  };
+
   return (
     <div style={{ display: 'flex', height: '100vh', flexDirection: 'column' }}>
       {/* Header */}
@@ -239,6 +280,40 @@ function App() {
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
+                onClick={() => setShowDebug(!showDebug)}
+                style={{
+                  backgroundColor: showDebug ? '#dc2626' : '#3e3e3e',
+                  border: 'none',
+                  padding: '5px 10px',
+                  borderRadius: '4px',
+                  color: '#d4d4d4',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '11px',
+                  position: 'relative'
+                }}
+              >
+                <Bug size={14} />
+                Debug
+                {activeErrors.length > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-4px',
+                    right: '-4px',
+                    backgroundColor: '#ef4444',
+                    color: 'white',
+                    borderRadius: '10px',
+                    padding: '2px 6px',
+                    fontSize: '10px',
+                    fontWeight: 'bold'
+                  }}>
+                    {activeErrors.length}
+                  </span>
+                )}
+              </button>
+              <button
                 onClick={() => setShowReview(!showReview)}
                 style={{
                   backgroundColor: showReview ? '#9c27b0' : '#3e3e3e',
@@ -277,9 +352,27 @@ function App() {
             </div>
           </div>
           <div style={{ flex: 1 }}>
-            <LivePreview html={html} css={css} js={js} />
+            <LivePreview 
+              html={html} 
+              css={css} 
+              js={js} 
+              onError={handleRuntimeError}
+            />
           </div>
         </div>
+
+        {/* Debug Panel */}
+        {showDebug && (
+          <div style={{ width: '350px', borderLeft: '1px solid #333' }}>
+            <DebugPanel
+              errors={activeErrors}
+              onAnalyze={(errorId) => analyzeError(errorId, js, 'javascript')}
+              onDismiss={dismissError}
+              onClear={clearErrors}
+              onApplyFix={handleApplyFix}
+            />
+          </div>
+        )}
 
         {/* AI Review Panel */}
         {showReview && (

@@ -5,6 +5,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { setupYjsServer } from './yjs-server';
 import codeReviewRouter from './routes/codeReview';
+import debugRouter from './routes/debug';
 
 dotenv.config();
 
@@ -28,6 +29,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/review', codeReviewRouter);
+app.use('/api/debug', debugRouter);
 
 // Socket.io connection handling
 io.on('connection', (socket) => {

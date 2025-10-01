@@ -1,5 +1,4 @@
 import { Editor } from '@monaco-editor/react';
-import { useEffect, useState } from 'react';
 
 interface CodeEditorProps {
   language: string;
@@ -8,7 +7,7 @@ interface CodeEditorProps {
 }
 
 export default function CodeEditor({ language, value, onChange }: CodeEditorProps) {
-  const [theme, setTheme] = useState<'vs-dark' | 'light'>('vs-dark');
+  const theme = 'vs-dark';
 
   const handleEditorChange = (value: string | undefined) => {
     onChange(value || '');
