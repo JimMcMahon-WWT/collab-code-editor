@@ -3,6 +3,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { setupYjsServer } from './yjs-server';
 
 dotenv.config();
 
@@ -41,6 +42,9 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
+
+// Setup Yjs WebSocket server
+setupYjsServer(httpServer);
 
 httpServer.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);

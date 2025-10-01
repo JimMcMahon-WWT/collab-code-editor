@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
-import CodeEditor from './components/CodeEditor';
+import CollaborativeEditor from './components/CollaborativeEditor';
 import LivePreview from './components/LivePreview';
 import Chat from './components/Chat';
+import { useCollaboration } from './hooks/useCollaboration';
 import { Code, Eye, MessageSquare } from 'lucide-react';
 
 interface Message {
@@ -17,10 +18,13 @@ function App() {
   const [currentUser] = useState(`User${Math.floor(Math.random() * 1000)}`);
   const [connected, setConnected] = useState(false);
 
-  // Code states
-  const [html, setHtml] = useState('<h1>Hello World!</h1>\n<p>Start editing to see changes</p>');
-  const [css, setCss] = useState('body {\n  font-family: Arial, sans-serif;\n  padding: 20px;\n}\n\nh1 {\n  color: #333;\n}');
-  const [js, setJs] = useState('console.log("Ready to code!");');
+  // Yjs collaboration
+  const { ydoc, provider, synced } = useCollaboration('code-room');
+  
+  // Code states - we'll read from Yjs
+  const [html, setHtml] = useState('');
+  const [css, setCss] = useState('');
+  const [js, setJs] = useState('');
   
   // UI states
   const [activeLanguage, setActiveLanguage] = useState<'html' | 'css' | 'javascript'>('html');
@@ -52,6 +56,43 @@ function App() {
     };
   }, []);
 
+  // Update preview when Yjs document changes
+  useEffect(() => {
+    const htmlText = ydoc.getText('html');
+    const cssText = ydoc.getText('css');
+    const jsText = ydoc.getText('javascript');
+
+    const updateHtml = () => setHtml(htmlText.toString());
+    const updateCss = () => setCss(cssText.toString());
+    const updateJs = () => setJs(jsText.toString());
+
+    htmlText.observe(updateHtml);
+    cssText.observe(updateCss);
+    jsText.observe(updateJs);
+
+    // Set initial values
+    setHtml(htmlText.toString());
+    setCss(cssText.toString());
+    setJs(jsText.toString());
+
+    // Initialize with default content if empty
+    if (htmlText.toString() === '' && synced) {
+      htmlText.insert(0, '<h1>Hello World!</h1>\n<p>Start editing to see changes</p>');
+    }
+    if (cssText.toString() === '' && synced) {
+      cssText.insert(0, 'body {\n  font-family: Arial, sans-serif;\n  padding: 20px;\n}\n\nh1 {\n  color: #333;\n}');
+    }
+    if (jsText.toString() === '' && synced) {
+      jsText.insert(0, 'console.log("Ready to code!");');
+    }
+
+    return () => {
+      htmlText.unobserve(updateHtml);
+      cssText.unobserve(updateCss);
+      jsText.unobserve(updateJs);
+    };
+  }, [ydoc, synced]);
+
   const handleSendMessage = (text: string) => {
     if (!socket) return;
     
@@ -64,22 +105,6 @@ function App() {
     
     socket.emit('chat-message', message);
     setMessages(prev => [...prev, message]);
-  };
-
-  const getCurrentCode = () => {
-    switch (activeLanguage) {
-      case 'html': return html;
-      case 'css': return css;
-      case 'javascript': return js;
-    }
-  };
-
-  const handleCodeChange = (value: string) => {
-    switch (activeLanguage) {
-      case 'html': setHtml(value); break;
-      case 'css': setCss(value); break;
-      case 'javascript': setJs(value); break;
-    }
   };
 
   return (
@@ -105,10 +130,10 @@ function App() {
             width: '8px',
             height: '8px',
             borderRadius: '50%',
-            backgroundColor: connected ? '#4caf50' : '#f44336'
+            backgroundColor: connected && synced ? '#4caf50' : '#f44336'
           }} />
           <span style={{ color: '#d4d4d4', fontSize: '12px' }}>
-            {connected ? 'Connected' : 'Disconnected'}
+            {connected && synced ? 'Synced' : 'Connecting...'}
           </span>
           <span style={{ color: '#888', fontSize: '12px' }}>
             {currentUser}
@@ -149,10 +174,11 @@ function App() {
 
           {/* Editor */}
           <div style={{ flex: 1 }}>
-            <CodeEditor
+            <CollaborativeEditor
               language={activeLanguage}
-              value={getCurrentCode()}
-              onChange={handleCodeChange}
+              ydoc={ydoc}
+              provider={provider}
+              textKey={activeLanguage}
             />
           </div>
         </div>
