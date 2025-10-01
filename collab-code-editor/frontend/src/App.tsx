@@ -3,8 +3,11 @@ import { io, Socket } from 'socket.io-client';
 import CollaborativeEditor from './components/CollaborativeEditor';
 import LivePreview from './components/LivePreview';
 import Chat from './components/Chat';
+import ReviewSidebar from './components/ReviewSidebar';
 import { useCollaboration } from './hooks/useCollaboration';
-import { Code, Eye, MessageSquare } from 'lucide-react';
+import { useCodeReview } from './hooks/useCodeReview';
+import type { CodeIssue } from './types/codeReview';
+import { Code, Eye, MessageSquare, Sparkles } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -29,7 +32,11 @@ function App() {
   // UI states
   const [activeLanguage, setActiveLanguage] = useState<'html' | 'css' | 'javascript'>('html');
   const [showChat, setShowChat] = useState(true);
+  const [showReview, setShowReview] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  
+  // Code review
+  const { issues, isAnalyzing, analyzeCode, dismissIssue } = useCodeReview();
 
   // Socket.io connection
   useEffect(() => {
@@ -105,6 +112,31 @@ function App() {
     
     socket.emit('chat-message', message);
     setMessages(prev => [...prev, message]);
+  };
+
+  // Code review handlers
+  const handleAnalyzeCode = () => {
+    const currentCode = getCurrentCode();
+    analyzeCode(currentCode, activeLanguage);
+  };
+
+  const handleIssueClick = (issue: CodeIssue) => {
+    // Will jump to line in editor
+    console.log('Jump to line:', issue.line);
+  };
+
+  const handleAcceptSuggestion = (issue: CodeIssue) => {
+    console.log('Accept suggestion for:', issue);
+    // TODO: Apply the fix to the code
+    dismissIssue(issue);
+  };
+
+  const getCurrentCode = () => {
+    switch (activeLanguage) {
+      case 'html': return html;
+      case 'css': return css;
+      case 'javascript': return js;
+    }
   };
 
   return (
@@ -205,29 +237,61 @@ function App() {
                 LIVE PREVIEW
               </span>
             </div>
-            <button
-              onClick={() => setShowChat(!showChat)}
-              style={{
-                backgroundColor: showChat ? '#0e639c' : '#3e3e3e',
-                border: 'none',
-                padding: '5px 10px',
-                borderRadius: '4px',
-                color: '#d4d4d4',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-                fontSize: '11px'
-              }}
-            >
-              <MessageSquare size={14} />
-              {showChat ? 'Hide Chat' : 'Show Chat'}
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setShowReview(!showReview)}
+                style={{
+                  backgroundColor: showReview ? '#9c27b0' : '#3e3e3e',
+                  border: 'none',
+                  padding: '5px 10px',
+                  borderRadius: '4px',
+                  color: '#d4d4d4',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '11px'
+                }}
+              >
+                <Sparkles size={14} />
+                AI Review
+              </button>
+              <button
+                onClick={() => setShowChat(!showChat)}
+                style={{
+                  backgroundColor: showChat ? '#0e639c' : '#3e3e3e',
+                  border: 'none',
+                  padding: '5px 10px',
+                  borderRadius: '4px',
+                  color: '#d4d4d4',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '11px'
+                }}
+              >
+                <MessageSquare size={14} />
+                Chat
+              </button>
+            </div>
           </div>
           <div style={{ flex: 1 }}>
             <LivePreview html={html} css={css} js={js} />
           </div>
         </div>
+
+        {/* AI Review Panel */}
+        {showReview && (
+          <ReviewSidebar
+            issues={issues}
+            isAnalyzing={isAnalyzing}
+            onAnalyze={handleAnalyzeCode}
+            onIssueClick={handleIssueClick}
+            onAcceptSuggestion={handleAcceptSuggestion}
+            onDismissIssue={dismissIssue}
+          />
+        )}
 
         {/* Chat Panel */}
         {showChat && (

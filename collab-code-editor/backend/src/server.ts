@@ -4,6 +4,7 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { setupYjsServer } from './yjs-server';
+import codeReviewRouter from './routes/codeReview';
 
 dotenv.config();
 
@@ -20,10 +21,13 @@ const io = new Server(httpServer, {
 // Middleware
 app.use(cors());
 app.use(express.json());
-// Basic health check endpoint
+
+// Routes
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+app.use('/api/review', codeReviewRouter);
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
