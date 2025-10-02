@@ -11,7 +11,8 @@ interface LivePreviewProps {
 
 export default function LivePreview({ html, css, js, onError }: LivePreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-
+  const callbackRef = useRef<string | null>(null);
+  
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
@@ -19,8 +20,11 @@ export default function LivePreview({ html, css, js, onError }: LivePreviewProps
     const document = iframe.contentDocument;
     if (!document) return;
 
-    // Create a unique callback name to communicate with iframe
-    const callbackName = `errorCallback_${Date.now()}`;
+    // Create or reuse callback name
+    if (!callbackRef.current) {
+      callbackRef.current = `errorCallback_${Date.now()}`;
+    }
+    const callbackName = callbackRef.current;
     
     // Expose error handler to iframe via window
     (window as any)[callbackName] = (error: any) => {
@@ -121,11 +125,18 @@ ${js}
     document.write(content);
     document.close();
 
-    // Cleanup
-    return () => {
-      delete (window as any)[callbackName];
-    };
+    // No cleanup needed here - callback persists across renders
+
   }, [html, css, js, onError]);
+  
+  // Cleanup callback only on component unmount
+  useEffect(() => {
+    return () => {
+      if (callbackRef.current) {
+        delete (window as any)[callbackRef.current];
+      }
+    };
+  }, []);
 
   return (
     <iframe
