@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import DOMPurify from 'dompurify';
 import type { RuntimeError } from '../hooks/useDebugger';
 
 interface LivePreviewProps {
@@ -36,10 +37,63 @@ export default function LivePreview({ html, css, js, onError }: LivePreviewProps
         onError(runtimeError);
       }
     };
+    // SECURITY FIX #1: Sanitize HTML and CSS to prevent XSS attacks
+    // Track sanitization events for security monitoring
+    const sanitizationEvents: string[] = [];
+    
+    // Add hooks to detect removed elements
+    DOMPurify.addHook('uponSanitizeElement', (_node, data) => {
+      if (data.tagName === 'script') {
+        sanitizationEvents.push(`🚨 BLOCKED: <script> tag detected and removed`);
+      } else if (!data.allowedTags[data.tagName]) {
+        if (data.tagName !== 'body' && data.tagName !== '#text' && data.tagName !== '#comment') {
+          sanitizationEvents.push(`⚠️  BLOCKED: <${data.tagName}> tag removed (not in whitelist)`);
+        }
+      }
+    });
 
-    // Count lines in HTML and CSS content
-    const htmlLines = html.split('\n').length;
-    const cssLines = css.split('\n').length;
+    DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
+      if (data.attrName && data.attrName.startsWith('on')) {
+        sanitizationEvents.push(`🚨 BLOCKED: ${data.attrName} event handler removed from <${node.nodeName.toLowerCase()}>`);
+      }
+    });
+
+    // Sanitize CSS - remove any potential script injections
+    const sanitizedCss = DOMPurify.sanitize(css, { 
+      ALLOWED_TAGS: [], // No HTML tags allowed in CSS
+      ALLOWED_ATTR: [],
+      KEEP_CONTENT: true // Keep the CSS content
+    });
+
+    // Sanitize HTML - allow safe HTML tags but block scripts
+    const sanitizedHtml = DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: [
+        'div', 'p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'a', 'img', 'ul', 'ol', 'li', 'br', 'hr', 'strong', 'em',
+        'b', 'i', 'u', 'code', 'pre', 'blockquote', 'table', 'thead',
+        'tbody', 'tr', 'td', 'th', 'section', 'article', 'header',
+        'footer', 'nav', 'main', 'aside', 'figure', 'figcaption'
+      ],
+      ALLOWED_ATTR: [
+        'class', 'id', 'href', 'src', 'alt', 'title', 'width', 'height',
+        'style', 'target', 'rel', 'data-*'
+      ],
+      ALLOW_DATA_ATTR: true
+    });
+
+    // Remove hooks to prevent memory leaks
+    DOMPurify.removeAllHooks();
+
+    // Log any sanitization events
+    if (sanitizationEvents.length > 0) {
+      console.group('🛡️ DOMPurify Security: Malicious content sanitized');
+      sanitizationEvents.forEach(event => console.warn(event));
+      console.groupEnd();
+    }
+
+    // Count lines in HTML and CSS content (after sanitization)
+    const htmlLines = sanitizedHtml.split('\n').length;
+    const cssLines = sanitizedCss.split('\n').length;
     
     // Line calculation: 
     // 1: <!DOCTYPE html>
@@ -52,11 +106,13 @@ export default function LivePreview({ html, css, js, onError }: LivePreviewProps
     
     const jsStartLine = 5 + cssLines + htmlLines;
     
+    // Note: JavaScript is NOT sanitized as users need to write arbitrary code
+    // The iframe sandbox provides isolation instead
     const content = `<!DOCTYPE html>
 <html><head><style>
-${css}
+${sanitizedCss}
 </style></head><body>
-${html}
+${sanitizedHtml}
 <script>window.addEventListener('error',function(e){var line=e.lineno-${jsStartLine};if(line>0&&window.parent&&window.parent.${callbackName}){window.parent.${callbackName}({message:e.message,stack:e.error?.stack,line:line,column:e.colno,fileName:e.filename});var d=document.createElement('div');d.style.cssText='color:#dc2626;padding:12px;background:#fee2e2;border-left:4px solid #dc2626;margin:10px;font-family:monospace;font-size:14px;';d.innerHTML='<strong>Error (Line '+line+'):</strong> '+e.message;document.body.appendChild(d)}});
 ${js}
 </script></body></html>`;

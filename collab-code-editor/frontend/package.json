@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "dompurify": "^3.2.7",
     "lib0": "^0.2.114",
     "lucide-react": "^0.544.0",
     "monaco-editor": "^0.53.0",
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
+    "@types/dompurify": "^3.0.5",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.3",
