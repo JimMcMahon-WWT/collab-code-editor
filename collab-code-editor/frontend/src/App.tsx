@@ -69,6 +69,11 @@ function App() {
       setMessages(prev => [...prev, { ...message, timestamp: new Date(message.timestamp) }]);
     });
 
+    // Listen for validation errors from server
+    newSocket.on('error', (error: string) => {
+      console.error('❌ Server validation error:', error);
+    });
+
     setSocket(newSocket);
 
     return () => {
