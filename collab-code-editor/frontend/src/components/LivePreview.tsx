@@ -11,36 +11,36 @@ interface LivePreviewProps {
 
 export default function LivePreview({ html, css, js, onError }: LivePreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const callbackRef = useRef<string | null>(null);
   
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
 
-    const document = iframe.contentDocument;
-    if (!document) return;
-
-    // Create or reuse callback name
-    if (!callbackRef.current) {
-      callbackRef.current = `errorCallback_${Date.now()}`;
-    }
-    const callbackName = callbackRef.current;
+  // SECURITY FIX #4: Listen for error messages from sandboxed iframe
+  const handleMessage = (event: MessageEvent) => {
+    // Security: Verify message is from our iframe
+    if (event.source !== iframe.contentWindow) return;
     
-    // Expose error handler to iframe via window
-    (window as any)[callbackName] = (error: any) => {
+    // Check if this is an error message
+    if (event.data && event.data.type === 'runtime-error') {
       const runtimeError: RuntimeError = {
-        message: error.message || 'Unknown error',
-        stack: error.stack,
-        line: error.line,
-        column: error.column,
-        fileName: error.fileName,
+        message: event.data.message || 'Unknown error',
+        stack: event.data.stack,
+        line: event.data.line,
+        column: event.data.column,
+        fileName: event.data.fileName,
         timestamp: new Date().toISOString(),
       };
       
       if (onError) {
         onError(runtimeError);
       }
-    };
+    }
+  };
+
+  window.addEventListener('message', handleMessage);
+
+
     // SECURITY FIX #1: Sanitize HTML and CSS to prevent XSS attacks
     // Track sanitization events for security monitoring
     const sanitizationEvents: string[] = [];
@@ -117,32 +117,23 @@ export default function LivePreview({ html, css, js, onError }: LivePreviewProps
 ${sanitizedCss}
 </style></head><body>
 ${sanitizedHtml}
-<script>window.addEventListener('error',function(e){var line=e.lineno-${jsStartLine};if(line>0&&window.parent&&window.parent.${callbackName}){window.parent.${callbackName}({message:e.message,stack:e.error?.stack,line:line,column:e.colno,fileName:e.filename});var d=document.createElement('div');d.style.cssText='color:#dc2626;padding:12px;background:#fee2e2;border-left:4px solid #dc2626;margin:10px;font-family:monospace;font-size:14px;';d.innerHTML='<strong>Error (Line '+line+'):</strong> '+e.message;document.body.appendChild(d)}});
+<script>window.addEventListener('error',function(e){var line=e.lineno-${jsStartLine};if(line>0){window.parent.postMessage({type:'runtime-error',message:e.message,stack:e.error?.stack,line:line,column:e.colno,fileName:e.filename},'*');var d=document.createElement('div');d.style.cssText='color:#dc2626;padding:12px;background:#fee2e2;border-left:4px solid #dc2626;margin:10px;font-family:monospace;font-size:14px;';d.innerHTML='<strong>Error (Line '+line+'):</strong> '+e.message;document.body.appendChild(d)}});
 ${js}
 </script></body></html>`;
 
-    document.open();
-    document.write(content);
-    document.close();
+iframe.srcdoc = content;
 
-    // No cleanup needed here - callback persists across renders
-
+    // Cleanup message listener
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
   }, [html, css, js, onError]);
   
-  // Cleanup callback only on component unmount
-  useEffect(() => {
-    return () => {
-      if (callbackRef.current) {
-        delete (window as any)[callbackRef.current];
-      }
-    };
-  }, []);
-
   return (
     <iframe
       ref={iframeRef}
       title="Live Preview"
-      sandbox="allow-scripts allow-same-origin"
+      sandbox="allow-scripts"
       style={{
         width: '100%',
         height: '100%',
